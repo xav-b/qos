@@ -1,29 +1,22 @@
 #!/usr/bin/env node
-'use strict';
-const url = require('url');
-const meow = require('meow');
-const speedtest = require('speedtest-net');
-const updateNotifier = require('update-notifier');
-const roundTo = require('round-to');
-const chalk = require('chalk');
-const logUpdate = require('log-update');
-const logSymbols = require('log-symbols');
-const Ora = require('ora');
+
+const debug = require('debug')('qos')
+const url = require('url')
+const meow = require('meow')
+const speedtest = require('speedtest-net')
+const updateNotifier = require('update-notifier')
+const roundTo = require('round-to')
+const Influx = require('influx')
 
 const cli = meow(`
 	Usage
 	  $ speed-test
 
 	Options
-	  --json -j     Output the result as JSON
 	  --bytes -b    Output the result in megabytes per second (MBps)
 	  --verbose -v  Output more detailed information
 `, {
 	flags: {
-		json: {
-			type: 'boolean',
-			alias: 'j'
-		},
 		bytes: {
 			type: 'boolean',
 			alias: 'b'
@@ -33,137 +26,115 @@ const cli = meow(`
 			alias: 'v'
 		}
 	}
-});
+})
 
-updateNotifier({pkg: cli.pkg}).notify();
+updateNotifier({pkg: cli.pkg}).notify()
 
 const stats = {
 	ping: '',
 	download: '',
 	upload: ''
-};
-
-let state = 'ping';
-const spinner = new Ora();
-const unit = cli.flags.bytes ? 'MBps' : 'Mbps';
-const multiplier = cli.flags.bytes ? 1 / 8 : 1;
-
-const getSpinner = x => state === x ? chalk.gray.dim(spinner.frame()) : '  ';
-
-const logError = error => {
-	if (cli.flags.json) {
-		console.error(JSON.stringify({error}));
-	} else {
-		console.error(logSymbols.error, error);
-	}
-};
-
-function render() {
-	if (cli.flags.json) {
-		console.log(JSON.stringify(stats));
-		return;
-	}
-
-	let output = `
-      Ping ${getSpinner('ping')}${stats.ping}
-  Download ${getSpinner('download')}${stats.download}
-    Upload ${getSpinner('upload')}${stats.upload}`;
-
-	if (cli.flags.verbose) {
-		output += [
-			'',
-			'    Server   ' + (stats.data === undefined ? '' : chalk.cyan(stats.data.server.host)),
-			'  Location   ' + (stats.data === undefined ? '' : chalk.cyan(stats.data.server.location + chalk.dim(' (' + stats.data.server.country + ')'))),
-			'  Distance   ' + (stats.data === undefined ? '' : chalk.cyan(roundTo(stats.data.server.distance, 1) + chalk.dim(' km')))
-		].join('\n');
-	}
-
-	logUpdate(output);
 }
 
-function setState(s) {
-	state = s;
+const unit = cli.flags.bytes ? 'MBps' : 'Mbps'
+const multiplier = cli.flags.bytes ? 1 / 8 : 1
 
-	if (s && s.length > 0) {
-		stats[s] = chalk.yellow(`0 ${chalk.dim(unit)}`);
-	}
-}
-
-function map(server) {
+function remapServer(server) {
 	/* eslint-disable prefer-destructuring */
-	server.host = url.parse(server.url).host;
-	server.location = server.name;
-	server.distance = server.dist;
-	return server;
+	server.host = url.parse(server.url).host
+	server.location = server.name
+	server.distance = server.dist
+
+	return server
 }
 
-const st = speedtest({maxTime: 20000});
+// store stats in influxdb
+const influx = new Influx.InfluxDB({
+  // TODO 2 flags + 2 constants
+  host: 'localhost',
+  port: 8086,
+  database: 'network',
+  schema: [
+    {
+      measurement: 'qos',
+      fields: {
+        ping: Influx.FieldType.INTEGER,
+        download: Influx.FieldType.FLOAT,
+        upload: Influx.FieldType.FLOAT,
 
-if (!cli.flags.json) {
-	setInterval(render, 50);
-}
+        distance: Influx.FieldType.FLOAT,
+
+        ip: Influx.FieldType.STRING,
+        isp_rating: Influx.FieldType.FLOAT,
+        latitude: Influx.FieldType.FLOAT,
+        longitude: Influx.FieldType.FLOAT,
+      },
+      tags: ['host', 'location'],
+    }
+  ],
+})
+influx.ping(5)
+      .then(cluster => debug(`connected to Influx: ${cluster[0].online}`))
+      .catch(err => debug(`failed to connect to Influx: ${err}`))
+
+// TODO flag
+const st = speedtest({maxTime: 20000})
 
 st.once('testserver', server => {
+  debug('connected to test server')
 	if (cli.flags.verbose) {
 		stats.data = {
-			server: map(server)
-		};
+			server: remapServer(server)
+		}
 	}
 
-	setState('download');
-	const ping = Math.round(server.bestPing);
-	stats.ping = cli.flags.json ? ping : chalk.cyan(ping + chalk.dim(' ms'));
-});
-
-st.on('downloadspeedprogress', speed => {
-	if (state === 'download' && cli.flags.json !== true) {
-		speed *= multiplier;
-		const download = roundTo(speed, speed >= 10 ? 0 : 1);
-		stats.download = chalk.yellow(`${download} ${chalk.dim(unit)}`);
-	}
-});
-
-st.on('uploadspeedprogress', speed => {
-	if (state === 'upload' && cli.flags.json !== true) {
-		speed *= multiplier;
-		const upload = roundTo(speed, speed >= 10 ? 0 : 1);
-		stats.upload = chalk.yellow(`${upload} ${chalk.dim(unit)}`);
-	}
-});
+	stats.ping = Math.round(server.bestPing)
+})
 
 st.once('downloadspeed', speed => {
-	setState('upload');
-	speed *= multiplier;
-	const download = roundTo(speed, speed >= 10 && !cli.flags.json ? 0 : 1);
-	stats.download = cli.flags.json ? download : chalk.cyan(download + ' ' + chalk.dim(unit));
-});
+	speed *= multiplier
+	stats.download = roundTo(speed, speed >= 10 && 1)
+})
 
 st.once('uploadspeed', speed => {
-	setState('');
-	speed *= multiplier;
-	const upload = roundTo(speed, speed >= 10 && !cli.flags.json ? 0 : 1);
-	stats.upload = cli.flags.json ? upload : chalk.cyan(upload + ' ' + chalk.dim(unit));
-});
+	speed *= multiplier
+	stats.upload = roundTo(speed, speed >= 10 && 1)
+})
 
 st.on('data', data => {
 	if (cli.flags.verbose) {
-		stats.data = data;
+		stats.data = data
 	}
-
-	render();
-});
+})
 
 st.on('done', () => {
-	console.log();
-	process.exit();
-});
+  debug('storing measurements')
+  influx.writePoints([
+    {
+      measurement: 'qos',
+      tags: { host: stats.data.server.host, location: stats.data.server.location },
+      fields: {
+        ping: stats.ping,
+        download: stats.download,
+        upload: stats.upload,
+
+        distance: stats.data.server.distance,
+
+        ip: stats.data.client.ip,
+        isp_rating: stats.data.client.isprating,
+        latitude: stats.data.client.lat,
+        longitude: stats.data.client.lon,
+      },
+    }
+  ]).catch (err => debug(logSymbols.error, `Error saving data to InfluxDB! ${err.stack}`))
+})
 
 st.on('error', err => {
 	if (err.code === 'ENOTFOUND') {
-		logError('Please check your internet connection');
+		debug(`Please check your internet connection: ${err}`)
 	} else {
-		logError(err);
+		debug(`something unexpected happened: ${err}`)
 	}
 
-	process.exit(1);
-});
+	process.exit(1)
+})
