@@ -1,13 +1,13 @@
 {
-	"name": "speed-test",
-	"version": "2.0.0",
+	"name": "qos",
+	"version": "0.1.0",
 	"description": "Test your internet connection speed and ping using speedtest.net from the CLI",
 	"license": "MIT",
-	"repository": "sindresorhus/speed-test",
+	"repository": "xav-b/qos",
 	"author": {
-		"name": "Sindre Sorhus",
-		"email": "sindresorhus@gmail.com",
-		"url": "sindresorhus.com"
+		"name": "Xavier Bruhiere",
+		"email": "xavier.bruhiere@gmail.com",
+		"url": "xav-b.fr"
 	},
 	"bin": "cli.js",
 	"engines": {
