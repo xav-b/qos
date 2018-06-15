@@ -2,6 +2,8 @@
 
 > Test and monitor your internet connection speed and ping using [speedtest.net](http://www.speedtest.net) from the CLI
 
+![Dashboard](_medias/dashboard.png "Speed dashboard")
+
 
 ## Install
 
