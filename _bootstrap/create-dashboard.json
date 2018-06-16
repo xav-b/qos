@@ -1,0 +1,13 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": null,
+    "title": "Network QOS",
+    "tags": ["monitoring"],
+    "timezone": "UTC",
+    "schemaVersion": 16,
+    "version": 0
+  },
+  "folderId": 0,
+  "overwrite": false
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Network",
+  "type": "influxdb",
+  "url": "http://db:8086",
+  "access": "proxy",
+  "basicAuth": false,
+  "isDefault": true,
+  "database": "network"
+}

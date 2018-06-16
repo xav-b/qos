@@ -8,44 +8,49 @@ const updateNotifier = require('update-notifier')
 const roundTo = require('round-to')
 const Influx = require('influx')
 
-const cli = meow(`
+// TODO choose output (stdout, influxdb)
+const cli = meow(
+  `
 	Usage
 	  $ speed-test
 
 	Options
 	  --bytes -b    Output the result in megabytes per second (MBps)
 	  --verbose -v  Output more detailed information
-`, {
-	flags: {
-		bytes: {
-			type: 'boolean',
-			alias: 'b'
-		},
-		verbose: {
-			type: 'boolean',
-			alias: 'v'
-		}
-	}
-})
+	  --db-host -h  Database host
+`,
+  {
+    flags: {
+      bytes: {
+        type: 'boolean',
+        alias: 'b',
+      },
+      verbose: {
+        type: 'boolean',
+        alias: 'v',
+      },
+    },
+  }
+)
 
-updateNotifier({pkg: cli.pkg}).notify()
+updateNotifier({ pkg: cli.pkg }).notify()
 
 const stats = {
-	ping: '',
-	download: '',
-	upload: ''
+  ping: '',
+  download: '',
+  upload: '',
 }
 
 const unit = cli.flags.bytes ? 'MBps' : 'Mbps'
 const multiplier = cli.flags.bytes ? 1 / 8 : 1
 
 function remapServer(server) {
-	/* eslint-disable prefer-destructuring */
-	server.host = url.parse(server.url).host
-	server.location = server.name
-	server.distance = server.dist
+  /* eslint-disable prefer-destructuring */
+  server.host = url.parse(server.url).host
+  server.location = server.name
+  server.distance = server.dist
 
-	return server
+  return server
 }
 
 // store stats in influxdb
@@ -70,71 +75,79 @@ const influx = new Influx.InfluxDB({
         longitude: Influx.FieldType.FLOAT,
       },
       tags: ['host', 'location'],
-    }
+    },
   ],
 })
-influx.ping(5)
-      .then(cluster => debug(`connected to Influx: ${cluster[0].online}`))
-      .catch(err => debug(`failed to connect to Influx: ${err}`))
+influx
+  .ping(5)
+  .then(cluster => debug(`connected to Influx: ${cluster[0].online}`))
+  .catch(err => debug(`failed to connect to Influx: ${err}`))
 
 // TODO flag
-const st = speedtest({maxTime: 20000})
+const st = speedtest({ maxTime: 20000 })
 
 st.once('testserver', server => {
   debug('connected to test server')
-	if (cli.flags.verbose) {
-		stats.data = {
-			server: remapServer(server)
-		}
-	}
+  if (cli.flags.verbose) {
+    stats.data = {
+      server: remapServer(server),
+    }
+  }
 
-	stats.ping = Math.round(server.bestPing)
+  stats.ping = Math.round(server.bestPing)
 })
 
 st.once('downloadspeed', speed => {
-	speed *= multiplier
-	stats.download = roundTo(speed, speed >= 10 && 1)
+  debug(`download speed: ${speed}`)
+  speed *= multiplier
+  stats.download = roundTo(speed, 2)
 })
 
 st.once('uploadspeed', speed => {
-	speed *= multiplier
-	stats.upload = roundTo(speed, speed >= 10 && 1)
+  debug(`upload speed: ${speed}`)
+  speed *= multiplier
+  stats.upload = roundTo(speed, 2)
 })
 
 st.on('data', data => {
-	if (cli.flags.verbose) {
-		stats.data = data
-	}
+  if (cli.flags.verbose) {
+    stats.data = data
+  }
 })
 
 st.on('done', () => {
   debug('storing measurements')
-  influx.writePoints([
-    {
-      measurement: 'qos',
-      tags: { host: stats.data.server.host, location: stats.data.server.location },
-      fields: {
-        ping: stats.ping,
-        download: stats.download,
-        upload: stats.upload,
+  influx
+    .writePoints([
+      {
+        measurement: 'qos',
+        tags: {
+          host: stats.data.server.host,
+          location: stats.data.server.location,
+        },
+        fields: {
+          ping: stats.ping,
+          download: stats.download,
+          upload: stats.upload,
 
-        distance: stats.data.server.distance,
+          distance: stats.data.server.distance,
 
-        ip: stats.data.client.ip,
-        isp_rating: stats.data.client.isprating,
-        latitude: stats.data.client.lat,
-        longitude: stats.data.client.lon,
+          ip: stats.data.client.ip,
+          isp_rating: stats.data.client.isprating,
+          latitude: stats.data.client.lat,
+          longitude: stats.data.client.lon,
+        },
       },
-    }
-  ]).catch (err => debug(logSymbols.error, `Error saving data to InfluxDB! ${err.stack}`))
+    ])
+    .catch(err => debug(`Error saving data to InfluxDB! ${err.stack}`))
 })
 
 st.on('error', err => {
-	if (err.code === 'ENOTFOUND') {
-		debug(`Please check your internet connection: ${err}`)
-	} else {
-		debug(`something unexpected happened: ${err}`)
-	}
+  if (err.code === 'ENOTFOUND') {
+    debug(`Please check your internet connection: ${err}`)
+  } else {
+    debug(`something unexpected happened: ${err}`)
+  }
 
-	process.exit(1)
+  process.exit(1)
 })
