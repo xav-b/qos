@@ -44,6 +44,7 @@
 	},
 	"devDependencies": {
 		"ava": "*",
+		"eslint": "^4.19.1",
 		"execa": "^0.9.0",
 		"xo": "*"
 	}
