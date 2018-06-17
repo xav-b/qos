@@ -23,13 +23,13 @@ echo "creating 'Network' data source"
 curl \
   -iX POST \
   --header "Content-type: application/json" \
-  -d @_bootstrap/ds.json \
+  -d @_bootstrap/create-ds.json \
   "${BASE_URL}/api/datasources"
 
-# NOTE create `internal` as well?
-echo "creating 'QOS' dashboard"
-curl \
-  -iX POST \
-  --header "Content-type: application/json" \
-  -d @_bootstrap/create-dashboard.json \
-  "${BASE_URL}/api/dashboards/db"
+# FIXME use the json template
+#echo "creating 'QOS' dashboard"
+#curl \
+  #-iX POST \
+  #--header "Content-type: application/json" \
+  #-d @_bootstrap/create-dashboard.json \
+  #"${BASE_URL}/api/dashboards/db"
