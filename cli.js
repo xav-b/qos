@@ -78,6 +78,7 @@ const influx = new Influx.InfluxDB({
     },
   ],
 })
+
 influx
   .ping(5)
   .then(cluster => debug(`connected to Influx: ${cluster[0].online}`))
@@ -116,7 +117,7 @@ st.on('data', data => {
 })
 
 st.on('done', () => {
-  debug('storing measurements')
+  debug(`storing measurements - host=${stats.data.server.host} location=${stats.data.server.location}`)
   influx
     .writePoints([
       {

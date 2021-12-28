@@ -33,3 +33,8 @@ curl \
   #--header "Content-type: application/json" \
   #-d @_bootstrap/create-dashboard.json \
   #"${BASE_URL}/api/dashboards/db"
+
+
+  echo "environment ready."
+	echo "connect to the dashboard at localhost:3000 (admin/admin)"
+	echo "and start monitoring: ./monitor.sh"
